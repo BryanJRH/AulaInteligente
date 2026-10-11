@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime
 from threading import Lock
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 
 app = Flask(__name__)
 
@@ -178,6 +178,49 @@ def chat():
         ).fetchall()
         conn.close()
     return jsonify({"comandos": [dict(f) for f in reversed(filas)]})
+
+
+# ---------------- Historial (ver la base de datos) ----------------
+NOMBRES_NIVEL = {0: "Apagado", 1: "Bajo (5V)", 2: "Alto (12V)"}
+
+
+@app.route("/historial")
+def historial():
+    """Pagina web con la tabla de todas las lecturas guardadas."""
+    with lock:
+        conn = get_db()
+        filas = conn.execute(
+            "SELECT * FROM lecturas ORDER BY id DESC LIMIT 300"
+        ).fetchall()
+        conn.close()
+    lista = []
+    for f in reversed(filas):
+        f = dict(f)
+        f["intake_txt"] = NOMBRES_NIVEL.get(f["intake"], "?")
+        f["extractor_txt"] = NOMBRES_NIVEL.get(f["extractor"], "?")
+        lista.append(f)
+    return render_template("historial.html", filas=lista)
+
+
+@app.route("/api/historial")
+def historial_json():
+    """Los datos guardados en JSON (los ultimos 500)."""
+    with lock:
+        conn = get_db()
+        filas = conn.execute(
+            "SELECT * FROM lecturas ORDER BY id DESC LIMIT 500"
+        ).fetchall()
+        conn.close()
+    return jsonify({"lecturas": [dict(f) for f in reversed(filas)]})
+
+
+@app.route("/api/descargar")
+def descargar_db():
+    """Descarga el archivo .db con todos los datos."""
+    try:
+        return send_file(DB_PATH, as_attachment=True, download_name="aula.db")
+    except Exception:
+        return jsonify({"ok": False, "error": "aun no hay base de datos"}), 404
 
 
 @app.route("/health")

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aula Inteligente · Historial</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --texto: #e2e8f0;
+    --suave: #94a3b8;
+    --acento: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--texto);
+    padding: 16px;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--suave); font-size: .85rem; margin-bottom: 16px; }
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .top a, .top button {
+    color: var(--acento); background: var(--card); border: 1px solid #334155;
+    padding: 7px 14px; border-radius: 999px; font-size: .85rem; text-decoration: none;
+    cursor: pointer;
+  }
+  .tablaWrap { overflow-x: auto; background: var(--card); border-radius: 14px; border: 1px solid #334155; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid #334155; white-space: nowrap; }
+  th { color: var(--suave); font-weight: 500; background: #17223a; }
+  tr:last-child td { border-bottom: none; }
+  .vacio { padding: 40px; text-align: center; color: var(--suave); }
+  .pie { color: var(--suave); font-size: .75rem; margin-top: 16px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>📚 Historial del Aula Inteligente</h1>
+  <div class="sub">Todas las lecturas guardadas en la base de datos</div>
+  <div class="top">
+    <a href="/">← Volver al dashboard</a>
+    <a href="/api/historial">Ver como JSON</a>
+    <a href="/api/descargar">⬇️ Descargar base de datos (.db)</a>
+  </div>
+
+  <div class="tablaWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Fecha y hora</th>
+          <th>Temp (°C)</th>
+          <th>Hum (%)</th>
+          <th>CO₂ (raw)</th>
+          <th>Intake</th>
+          <th>Extractor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr>
+          <td>{{ f.id }}</td>
+          <td>{{ f.hora }}</td>
+          <td>{{ f.temp if f.temp is not none else "N/D" }}</td>
+          <td>{{ f.hum if f.hum is not none else "N/D" }}</td>
+          <td>{{ f.co2 }}</td>
+          <td>{{ f.intake_txt }}</td>
+          <td>{{ f.extractor_txt }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="vacio">Todavía no hay datos. Conecta el ESP32 para empezar a guardar.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pie">Se muestran hasta 300 lecturas recientes.</div>
+</body>
+</html>
