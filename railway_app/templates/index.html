@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aula Inteligente</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --texto: #e2e8f0;
+    --suave: #94a3b8;
+    --acento: #38bdf8;
+    --verde: #22c55e;
+    --ambar: #f59e0b;
+    --rojo: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--texto);
+    padding: 16px;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--suave); font-size: .85rem; margin-bottom: 16px; }
+  .estado {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px; font-size: .85rem;
+    background: var(--card); margin-bottom: 16px;
+  }
+  .punto { width: 10px; height: 10px; border-radius: 50%; background: var(--suave); }
+  .punto.on { background: var(--verde); box-shadow: 0 0 8px var(--verde); }
+  .punto.off { background: var(--rojo); }
+  .grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--card); border-radius: 14px; padding: 16px;
+    border: 1px solid #334155;
+  }
+  .card .label { color: var(--suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .5px; }
+  .card .valor { font-size: 2rem; font-weight: 700; margin-top: 6px; }
+  .card .valor small { font-size: .9rem; font-weight: 400; color: var(--suave); }
+  .valor.verde { color: var(--verde); }
+  .valor.ambar { color: var(--ambar); }
+  .valor.rojo { color: var(--rojo); }
+  .panel {
+    background: var(--card); border-radius: 14px; padding: 16px;
+    border: 1px solid #334155;
+  }
+  .panel h2 { font-size: 1rem; margin: 0 0 12px; color: var(--suave); font-weight: 500; }
+  canvas { max-height: 320px; }
+  .pie { color: var(--suave); font-size: .75rem; margin-top: 16px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>🌡️ Aula Inteligente</h1>
+  <div class="sub">Monitoreo en tiempo real · temperatura, humedad y calidad del aire</div>
+
+  <div class="estado">
+    <span class="punto" id="punto"></span>
+    <span id="textoEstado">Conectando…</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Temperatura</div>
+      <div class="valor" id="temp">--<small> °C</small></div>
+    </div>
+    <div class="card">
+      <div class="label">Humedad</div>
+      <div class="valor" id="hum">--<small> %</small></div>
+    </div>
+    <div class="card">
+      <div class="label">Calidad del aire (CO₂)</div>
+      <div class="valor" id="co2">--</div>
+    </div>
+    <div class="card">
+      <div class="label">Intake</div>
+      <div class="valor" id="intake">--</div>
+    </div>
+    <div class="card">
+      <div class="label">Extractor</div>
+      <div class="valor" id="extractor">--</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Temperatura y CO₂ en el tiempo</h2>
+    <canvas id="grafica"></canvas>
+  </div>
+
+  <div class="pie">Última actualización: <span id="ultima">--</span></div>
+
+<script>
+const NOMBRES_NIVEL = { 0: "Apagado", 1: "Bajo (5V)", 2: "Alto (12V)" };
+const COLOR_NIVEL   = { 0: "rojo", 1: "ambar", 2: "verde" };
+
+function fmt(v, dec) {
+  if (v === null || v === undefined) return "--";
+  return Number(v).toFixed(dec === undefined ? 1 : dec);
+}
+
+function pintarNivel(id, nivel) {
+  const el = document.getElementById(id);
+  const n = Number(nivel);
+  el.textContent = NOMBRES_NIVEL[n] || "--";
+  el.className = "valor " + (COLOR_NIVEL[n] || "");
+}
+
+const ctx = document.getElementById("grafica");
+const grafica = new Chart(ctx, {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: "Temp (°C)",
+        data: [],
+        borderColor: "#ef4444",
+        backgroundColor: "rgba(239,68,68,.15)",
+        tension: .3, yAxisID: "y1", spanGaps: true,
+      },
+      {
+        label: "CO₂ (raw)",
+        data: [],
+        borderColor: "#38bdf8",
+        backgroundColor: "rgba(56,189,248,.15)",
+        tension: .3, yAxisID: "y2", spanGaps: true,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    scales: {
+      x: { ticks: { color: "#94a3b8", maxTicksLimit: 8 }, grid: { color: "#334155" } },
+      y1: { position: "left", ticks: { color: "#ef4444" }, grid: { color: "#334155" } },
+      y2: { position: "right", ticks: { color: "#38bdf8" }, grid: { drawOnChartArea: false } },
+    },
+    plugins: { legend: { labels: { color: "#e2e8f0" } } },
+  },
+});
+
+async function actualizar() {
+  try {
+    const r = await fetch("/api/datos", { cache: "no-store" });
+    const datos = await r.json();
+    const u = datos.ultima;
+
+    if (!u) {
+      document.getElementById("textoEstado").textContent = "Sin datos todavía (esperando al ESP32)";
+      return;
+    }
+
+    document.getElementById("temp").innerHTML = fmt(u.temp) + "<small> °C</small>";
+    document.getElementById("hum").innerHTML = fmt(u.hum) + "<small> %</small>";
+    document.getElementById("co2").textContent = u.co2 ?? "--";
+    pintarNivel("intake", u.intake);
+    pintarNivel("extractor", u.extractor);
+    document.getElementById("ultima").textContent = u.hora;
+
+    const hace = (Date.now() / 1000) - Number(u.ts);
+    const punto = document.getElementById("punto");
+    const ok = hace < 60;
+    punto.className = "punto " + (ok ? "on" : "off");
+    document.getElementById("textoEstado").textContent =
+      ok ? "En línea · hace " + Math.round(hace) + " s" : "Sin señal desde hace " + Math.round(hace) + " s";
+
+    const h = datos.historial || [];
+    grafica.data.labels = h.map(x => x.hora.slice(11, 19));
+    grafica.data.datasets[0].data = h.map(x => x.temp);
+    grafica.data.datasets[1].data = h.map(x => x.co2);
+    grafica.update("none");
+  } catch (e) {
+    document.getElementById("textoEstado").textContent = "Error de conexión con el servidor";
+    document.getElementById("punto").className = "punto off";
+  }
+}
+
+actualizar();
+setInterval(actualizar, 5000);
+</script>
+</body>
+</html>
