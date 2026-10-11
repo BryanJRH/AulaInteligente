@@ -23,6 +23,8 @@
     background: var(--bg);
     color: var(--texto);
     padding: 16px;
+    max-width: 900px;
+    margin: 0 auto;
   }
   h1 { font-size: 1.5rem; margin: 0 0 4px; }
   .sub { color: var(--suave); font-size: .85rem; margin-bottom: 16px; }
@@ -51,16 +53,41 @@
   .valor.rojo { color: var(--rojo); }
   .panel {
     background: var(--card); border-radius: 14px; padding: 16px;
-    border: 1px solid #334155;
+    border: 1px solid #334155; margin-bottom: 20px;
   }
   .panel h2 { font-size: 1rem; margin: 0 0 12px; color: var(--suave); font-weight: 500; }
   canvas { max-height: 320px; }
   .pie { color: var(--suave); font-size: .75rem; margin-top: 16px; text-align: center; }
+
+  /* ---------- Chat ---------- */
+  .chatMsgs {
+    max-height: 280px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 8px; background: #0b1220; border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .burbuja {
+    max-width: 80%; padding: 8px 12px; border-radius: 12px;
+    font-size: .9rem; white-space: pre-wrap; word-break: break-word;
+  }
+  .burbuja.usr  { align-self: flex-end; background: var(--acento); color: #082f49; }
+  .burbuja.bot  { align-self: flex-start; background: #0f172a; border: 1px solid #334155; }
+  .burbuja.estado { align-self: flex-start; color: var(--suave); font-size: .78rem; padding: 4px 8px; }
+  .chatRow { display: flex; gap: 8px; }
+  .chatRow input {
+    flex: 1; background: #0b1220; color: var(--texto);
+    border: 1px solid #334155; border-radius: 10px; padding: 10px 12px;
+  }
+  .chatRow button {
+    background: var(--acento); color: #082f49; border: none;
+    border-radius: 10px; padding: 10px 18px; font-weight: 700; cursor: pointer;
+  }
+  .chatAyuda { color: var(--suave); font-size: .75rem; margin-top: 8px; }
 </style>
 </head>
 <body>
   <h1>🌡️ Aula Inteligente</h1>
-  <div class="sub">Monitoreo en tiempo real · temperatura, humedad y calidad del aire</div>
+  <div class="sub">Monitoreo en tiempo real · temperatura, humedad y calidad del aire + control</div>
 
   <div class="estado">
     <span class="punto" id="punto"></span>
@@ -95,6 +122,16 @@
     <canvas id="grafica"></canvas>
   </div>
 
+  <div class="panel">
+    <h2>💬 Chat con el ESP32</h2>
+    <div class="chatMsgs" id="chatMsgs"></div>
+    <div class="chatRow">
+      <input id="chatInput" placeholder="/manual, /auto, /intake 1, /extractor 2, /status">
+      <button id="chatSend">Enviar</button>
+    </div>
+    <div class="chatAyuda">Comandos: /manual · /auto · /intake 0|1|2 · /extractor 0|1|2 · /status</div>
+  </div>
+
   <div class="pie">Última actualización: <span id="ultima">--</span></div>
 
 <script>
@@ -111,6 +148,7 @@ function pintarNivel(id, nivel) {
   const n = Number(nivel);
   el.textContent = NOMBRES_NIVEL[n] || "--";
   el.className = "valor " + (COLOR_NIVEL[n] || "");
+  return n;
 }
 
 const ctx = document.getElementById("grafica");
@@ -148,6 +186,7 @@ const grafica = new Chart(ctx, {
   },
 });
 
+// ---------- Datos en vivo ----------
 async function actualizar() {
   try {
     const r = await fetch("/api/datos", { cache: "no-store" });
@@ -184,8 +223,62 @@ async function actualizar() {
   }
 }
 
+// ---------- Chat ----------
+async function cargarChat() {
+  try {
+    const r = await fetch("/api/chat", { cache: "no-store" });
+    const datos = await r.json();
+    const cont = document.getElementById("chatMsgs");
+    cont.innerHTML = "";
+    (datos.comandos || []).forEach(c => {
+      const u = document.createElement("div");
+      u.className = "burbuja usr";
+      u.textContent = c.texto;
+      cont.appendChild(u);
+
+      if (c.estado === "respondido" && c.respuesta) {
+        const b = document.createElement("div");
+        b.className = "burbuja bot";
+        b.textContent = c.respuesta;
+        cont.appendChild(b);
+      } else if (c.estado === "entregado") {
+        const b = document.createElement("div");
+        b.className = "burbuja estado";
+        b.textContent = "📨 Recibido por el ESP32…";
+        cont.appendChild(b);
+      } else {
+        const b = document.createElement("div");
+        b.className = "burbuja estado";
+        b.textContent = "⏳ Esperando al ESP32…";
+        cont.appendChild(b);
+      }
+    });
+    cont.scrollTop = cont.scrollHeight;
+  } catch (e) {}
+}
+
+async function enviarChat() {
+  const input = document.getElementById("chatInput");
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = "";
+  try {
+    await fetch("/api/comandos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto }),
+    });
+  } catch (e) {}
+  cargarChat();
+}
+
+document.getElementById("chatSend").onclick = enviarChat;
+document.getElementById("chatInput").onkeydown = (e) => { if (e.key === "Enter") enviarChat(); };
+
+// ---------- Inicio ----------
 actualizar();
-setInterval(actualizar, 5000);
+cargarChat();
+setInterval(() => { actualizar(); cargarChat(); }, 3000);
 </script>
 </body>
 </html>
